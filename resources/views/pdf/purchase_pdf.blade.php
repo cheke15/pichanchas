@@ -98,7 +98,7 @@
          <div id="total">
             <table>
                <tr>
-                  <td>Order Tax</td>
+                  <td>Order tax</td>
                   <td>{{$purchase['TaxNet']}} </td>
                </tr>
                <tr>

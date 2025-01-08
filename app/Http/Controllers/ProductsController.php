@@ -182,36 +182,70 @@ class ProductsController extends BaseController
         ]);
     }
 
-    //-------------- Store new  Product  ---------------\\
+//-------------- Store new Product ---------------\\
 
-    public function store(Request $request)
-    {
-        $this->authorizeForUser($request->user('api'), 'create', Product::class);
+public function store(Request $request)
+{
+    $this->authorizeForUser($request->user('api'), 'create', Product::class);
 
-        try {
-           
-            // define validation rules for product
-            $productRules = [
-                'code'         => [
-                    'required',
-                    Rule::unique('products')->where(function ($query) {
-                        return $query->where('deleted_at', '=', null);
-                    }),
+    try {
+        // Validación de datos
+        $productRules = [
+            'code'         => [
+                'required',
+                Rule::unique('products')->where(function ($query) {
+                    return $query->where('deleted_at', '=', null);
+                }),
 
-                    Rule::unique('product_variants')->where(function ($query) {
-                        return $query->where('deleted_at', '=', null);
-                    }),
-                ],
-                'name'         => 'required',
-                'Type_barcode' => 'required',
-                'category_id'  => 'required',
-                'type'         => 'required',
-                'tax_method'   => 'required',
-                'unit_id'      => Rule::requiredIf($request->type != 'is_service'),
-                'cost'         => Rule::requiredIf($request->type == 'is_single' || $request->type == 'is_combo'),
-                'price'        => Rule::requiredIf($request->type != 'is_variant'),
-            ];
+                Rule::unique('product_variants')->where(function ($query) {
+                    return $query->where('deleted_at', '=', null);
+                }),
+            ],
+            'name'         => 'required',
+            'Type_barcode' => 'required',
+            'category_id'  => 'required',
+            'type'         => 'required',
+            'tax_method'   => 'required',
+            'unit_id'      => Rule::requiredIf($request->type != 'is_service'),
+            'cost'         => Rule::requiredIf($request->type == 'is_single' || $request->type == 'is_combo'),
+            'price'        => Rule::requiredIf($request->type != 'is_variant'),
+        ];
 
+        $validatedData = $request->validate($productRules);
+
+        //  Cálculo de impuestos
+        $price = $validatedData['price'] ?? 0; 
+        $ieps = $price * 0.08; // 8% de IEPS
+        $iva = $price * 0.16; // 16% de (IVA)
+
+        //  Crear el producto
+        $product = Product::create([
+            'code'         => $validatedData['code'],
+            'name'         => $validatedData['name'],
+            'Type_barcode' => $validatedData['Type_barcode'],
+            'category_id'  => $validatedData['category_id'],
+            'type'         => $validatedData['type'],
+            'tax_method'   => $validatedData['tax_method'],
+            'unit_id'      => $validatedData['unit_id'] ?? null,
+            'cost'         => $validatedData['cost'] ?? 0,
+            'price'        => $price,
+            'ieps'         => $ieps,
+            'iva'          => $iva,
+        ]);
+
+        //  Respuesta JSON
+        return response()->json([
+            'message' => 'Producto creado correctamente',
+            'product' => $product
+        ], 201);
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => 'Error al crear el producto',
+            'error'   => $e->getMessage()
+        ], 500);
+    }
+}
+};
 
            // if type is not is_variant, add validation for variants array
             if ($request->type == 'is_variant') {
@@ -505,15 +539,15 @@ class ProductsController extends BaseController
         $this->authorizeForUser($request->user('api'), 'update', Product::class);
         try {
             
-             // define validation rules for product
+             // define validation rules for produc
              $productRules = [
-                'code'         => [
+                'code' => [
                     'required',
-
+            
                     Rule::unique('products')->ignore($id)->where(function ($query) {
                         return $query->where('deleted_at', '=', null);
                     }),
-
+            
                     Rule::unique('product_variants')->ignore($id, 'product_id')->where(function ($query) {
                         return $query->where('deleted_at', '=', null);
                     }),
@@ -655,13 +689,11 @@ class ProductsController extends BaseController
             }
 
 
-
-            // validate the request data
             $validatedData = $request->validate($productRules, [
-                'code.unique'   => 'Product code already used.',
-                'code.required' => 'This field is required',
+                'code.unique' => 'The product code is already taken. Please choose another.',
+                'code.required' => 'The product code field cannot be empty.',
+                'name.required' => 'The product name is mandatory.'
             ]);
-
 
             \DB::transaction(function () use ($request, $id) {
 
